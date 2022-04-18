@@ -47,6 +47,12 @@ public class Client {
 
             Channel channel = bootstrap.connect("localhost", 9000).sync().channel();
 
+            AuthMessage authMessage1 = new AuthMessage();
+            authMessage1.setLogin("login1");
+            authMessage1.setPassword("pass1");
+            System.out.println("Try to auth: " + authMessage1.getLogin() + "/" + authMessage1.getPassword());
+            channel.writeAndFlush(authMessage1);
+
             while (channel.isActive()) {
                 TextMessage textMessage = new TextMessage();
                 textMessage.setText(String.format("[%s] %s", LocalDateTime.now(), Thread.currentThread().getName()));
