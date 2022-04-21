@@ -6,16 +6,18 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 
-import java.time.LocalDateTime;
-import java.util.Date;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+
 
 public class Client {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws FileNotFoundException {
         new Client().start();
     }
 
-    public void start() {
+    public void start() throws FileNotFoundException {
+        FileOutputStream outputStream = new FileOutputStream("/home/tpronicheva/video2.zip");
         final NioEventLoopGroup group = new NioEventLoopGroup(1);
         try {
             Bootstrap bootstrap = new Bootstrap()
@@ -34,9 +36,33 @@ public class Client {
                                     new JsonDecoder(),
                                     new JsonEncoder(),
                                     new SimpleChannelInboundHandler<Message>() {
+                                        int counter = 0;
+
+                                        @Override
+                                        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+                                            AuthMessage authMessage1 = new AuthMessage();
+                                            authMessage1.setLogin("login1");
+                                            authMessage1.setPassword("pass1");
+                                            System.out.println("Try to auth: " + authMessage1.getLogin() + "/" + authMessage1.getPassword());
+                                            ctx.writeAndFlush(authMessage1);
+                                        }
+
                                         @Override
                                         protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
-                                            System.out.println("receive msg " + msg);
+                                            if (msg instanceof TextMessage){
+                                                System.out.println("receive msg " + msg);
+                                            }
+                                            if (msg instanceof FileContentMessage){
+                                                FileContentMessage message = (FileContentMessage) msg;
+                                                try{
+                                                  outputStream.write(message.getContent());
+                                                  counter ++;
+                                                  System.out.println(counter + " packages received");
+                                                  if (message.isLast()){ctx.close();}
+                                                } catch(Exception e){
+                                                    e.printStackTrace();
+                                                }
+                                            }
                                         }
                                     }
                             );
@@ -44,28 +70,11 @@ public class Client {
                     });
 
             System.out.println("Client started");
-
             Channel channel = bootstrap.connect("localhost", 9000).sync().channel();
 
-            AuthMessage authMessage1 = new AuthMessage();
-            authMessage1.setLogin("login1");
-            authMessage1.setPassword("pass1");
-            System.out.println("Try to auth: " + authMessage1.getLogin() + "/" + authMessage1.getPassword());
-            channel.writeAndFlush(authMessage1);
-
-            while (channel.isActive()) {
-                TextMessage textMessage = new TextMessage();
-                textMessage.setText(String.format("[%s] %s", LocalDateTime.now(), Thread.currentThread().getName()));
-                System.out.println("Try to send message: " + textMessage);
-                channel.writeAndFlush(textMessage);
-
-                DateMessage dateMessage = new DateMessage();
-                dateMessage.setDate(new Date());
-                channel.write(dateMessage);
-                System.out.println("Try to send message: " + dateMessage);
-                channel.flush();
-                Thread.sleep(3000);
-            }
+            FileRequestMessage message = new FileRequestMessage();
+            message.setPath("/home/tpronicheva/video.zip");
+            channel.writeAndFlush(message);
 
             channel.closeFuture().sync();
         } catch (InterruptedException e) {

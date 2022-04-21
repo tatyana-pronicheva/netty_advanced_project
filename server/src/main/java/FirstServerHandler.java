@@ -1,6 +1,10 @@
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+
 
 public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
     private boolean isAuthorized = false;
@@ -20,7 +24,6 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
             System.out.println("incoming authorization: " + message.getLogin()+"/"+message.getPassword());
             isAuthorized = AuthorizationService.authorizationAttempt(message.getLogin(),message.getPassword());
             TextMessage answer = new TextMessage();
-            System.out.println(isAuthorized);
             if(isAuthorized){
                 answer.setText("Успешная авторизация");
             } else {
@@ -43,6 +46,24 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
             answer.setText("Необходимо авторизоваться чтобы отправлять сообщения на сервер, пришлите логин и пароль");
             System.out.println("Сообщение без авторизации");
             ctx.writeAndFlush(answer);
+        }
+        if(msg instanceof FileRequestMessage && isAuthorized){
+            FileRequestMessage message = (FileRequestMessage) msg;
+            File filePath = message.getPath();
+            try (FileInputStream inputStream = new FileInputStream(filePath)){
+                long startPosition = 0;
+                while (inputStream.available()>0){
+                    byte[] fileContent = inputStream.readNBytes(64*1024);
+                    startPosition += fileContent.length;
+                    FileContentMessage contentMessage = new FileContentMessage();
+                    contentMessage.setLast(inputStream.available()<=0);
+                    contentMessage.setContent(fileContent);
+                    contentMessage.setStartPosition(startPosition);
+                    ctx.writeAndFlush(contentMessage);
+                }
+            }catch(IOException e){
+                e.printStackTrace();
+            }
         }
     }
 
