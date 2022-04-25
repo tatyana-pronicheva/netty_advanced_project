@@ -1,13 +1,17 @@
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 
 
 public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
     private boolean isAuthorized = false;
+    FileInputStream inputStream = null;
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
@@ -18,7 +22,7 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
+    protected void channelRead0(ChannelHandlerContext ctx, Message msg) throws IOException {
         if (msg instanceof AuthMessage){
             AuthMessage message = (AuthMessage) msg;
             System.out.println("incoming authorization: " + message.getLogin()+"/"+message.getPassword());
@@ -48,22 +52,32 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
             ctx.writeAndFlush(answer);
         }
         if(msg instanceof FileRequestMessage && isAuthorized){
-            FileRequestMessage message = (FileRequestMessage) msg;
-            File filePath = message.getPath();
-            try (FileInputStream inputStream = new FileInputStream(filePath)){
-                long startPosition = 0;
-                while (inputStream.available()>0){
-                    byte[] fileContent = inputStream.readNBytes(64*1024);
-                    startPosition += fileContent.length;
-                    FileContentMessage contentMessage = new FileContentMessage();
-                    contentMessage.setLast(inputStream.available()<=0);
-                    contentMessage.setContent(fileContent);
-                    contentMessage.setStartPosition(startPosition);
-                    ctx.writeAndFlush(contentMessage);
-                }
-            }catch(IOException e){
-                e.printStackTrace();
+            if (inputStream==null) {
+                FileRequestMessage message = (FileRequestMessage) msg;
+                File filePath = message.getPath();
+                inputStream = new FileInputStream(filePath);
             }
+            sendFile(ctx);
+        }
+    }
+
+    private void sendFile(ChannelHandlerContext ctx) throws IOException {
+            byte[] fileContent = inputStream.readNBytes(64*1024);
+            FileContentMessage contentMessage = new FileContentMessage();
+            contentMessage.setLast(inputStream.available()<=0);
+            contentMessage.setContent(fileContent);
+
+        ctx.channel().writeAndFlush(contentMessage).addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                if (!contentMessage.isLast()){
+                    sendFile(ctx);
+                }
+            }
+        });
+        if(contentMessage.isLast()){
+            inputStream.close();
+            inputStream = null;
         }
     }
 
@@ -74,7 +88,10 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
     }
 
     @Override
-    public void channelInactive(ChannelHandlerContext ctx) {
+    public void channelInactive(ChannelHandlerContext ctx) throws IOException {
+        if (inputStream!=null){
+            inputStream.close();
+        }
         System.out.println("client disconnect");
     }
 }
