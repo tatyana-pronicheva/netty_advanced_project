@@ -36,8 +36,6 @@ public class Server {
                                     new JsonDecoder(),
                                     new JsonEncoder(),
                                     new FirstServerHandler());
-                            //in -> LineBasedFrameDecoder -> JsonDecoder -> FirstServerHandler
-                            //JsonEncoder -> LengthFieldPrepender -> out
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)

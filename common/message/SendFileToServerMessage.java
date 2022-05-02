@@ -1,7 +1,16 @@
-public class FileContentMessage extends Message {
+public class SendFileToServerMessage extends Message {
     private long startPosition;
     private byte[] content;
     private boolean last;
+    String path;
+
+    public void setPath(String path) {
+        this.path = path;
+    }
+
+    public String getPath() {
+        return path;
+    }
 
     public boolean isLast() {
         return last;

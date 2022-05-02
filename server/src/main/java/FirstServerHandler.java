@@ -5,13 +5,16 @@ import io.netty.channel.SimpleChannelInboundHandler;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 
 
 public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
     private boolean isAuthorized = false;
     FileInputStream inputStream = null;
+    FileOutputStream outputStream = null;
+    static final String BASE_PATH = System.getProperty("user.dir") + File.separator;
+    String homeFolder;
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
@@ -30,40 +33,50 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
             TextMessage answer = new TextMessage();
             if(isAuthorized){
                 answer.setText("Успешная авторизация");
+                homeFolder = BASE_PATH + message.getLogin() + File.separator;
+                new File(homeFolder).mkdir();
             } else {
-                answer.setText("Неправильно введены данные или такой пользователь уже залогинен");
+                answer.setText("Неправильный логин или пароль");
             };
             ctx.writeAndFlush(answer);
-        }
-        if (msg instanceof TextMessage && isAuthorized) {
-            TextMessage message = (TextMessage) msg;
-            System.out.println("incoming text message: " + message.getText());
-            ctx.writeAndFlush(msg);
-        }
-        if (msg instanceof DateMessage && isAuthorized) {
-            DateMessage message = (DateMessage) msg;
-            System.out.println("incoming date message: " + message.getDate());
-            ctx.writeAndFlush(msg);
         }
         if(!(msg instanceof AuthMessage) && !isAuthorized){
             TextMessage answer = new TextMessage();
             answer.setText("Необходимо авторизоваться чтобы отправлять сообщения на сервер, пришлите логин и пароль");
-            System.out.println("Сообщение без авторизации");
+            System.out.println("Получено сообщение от неавторизованного пользователя");
             ctx.writeAndFlush(answer);
         }
-        if(msg instanceof FileRequestMessage && isAuthorized){
+        if(msg instanceof RequestFileFromServerMessage && isAuthorized){
             if (inputStream==null) {
-                FileRequestMessage message = (FileRequestMessage) msg;
-                File filePath = message.getPath();
+                RequestFileFromServerMessage message = (RequestFileFromServerMessage) msg;
+                File filePath = new File(homeFolder + message.getPath());
                 inputStream = new FileInputStream(filePath);
             }
             sendFile(ctx);
+        }
+        if(msg instanceof SendFileToServerMessage && isAuthorized){
+            SendFileToServerMessage message = (SendFileToServerMessage) msg;
+            try{
+                if(outputStream==null){
+                    outputStream = new FileOutputStream(homeFolder + message.getPath());
+                }
+                outputStream.write(message.getContent());
+                if (message.isLast()){
+                    System.out.println("От клиента получен файл");
+                    outputStream.close();
+                    outputStream = null;
+                }
+            } catch(Exception e){
+                e.printStackTrace();
+                outputStream.close();
+                outputStream = null;
+            }
         }
     }
 
     private void sendFile(ChannelHandlerContext ctx) throws IOException {
             byte[] fileContent = inputStream.readNBytes(64*1024);
-            FileContentMessage contentMessage = new FileContentMessage();
+            ServerResponseWithContentMessage contentMessage = new ServerResponseWithContentMessage();
             contentMessage.setLast(inputStream.available()<=0);
             contentMessage.setContent(fileContent);
 
@@ -78,6 +91,7 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
         if(contentMessage.isLast()){
             inputStream.close();
             inputStream = null;
+            System.out.println("Клиенту отправлен файл");
         }
     }
 
