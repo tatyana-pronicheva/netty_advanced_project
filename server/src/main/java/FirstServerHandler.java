@@ -2,6 +2,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import message.*;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -20,7 +21,7 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
     public void channelActive(ChannelHandlerContext ctx) {
         System.out.println("New active channel");
         TextMessage answer = new TextMessage();
-        answer.setText("Successfully connection");
+        answer.setText("Успешное подключение");
         ctx.writeAndFlush(answer);
     }
 
@@ -46,30 +47,43 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
             System.out.println("Получено сообщение от неавторизованного пользователя");
             ctx.writeAndFlush(answer);
         }
-        if(msg instanceof RequestFileFromServerMessage && isAuthorized){
-            if (inputStream==null) {
-                RequestFileFromServerMessage message = (RequestFileFromServerMessage) msg;
-                File filePath = new File(homeFolder + message.getPath());
-                inputStream = new FileInputStream(filePath);
-            }
-            sendFile(ctx);
-        }
-        if(msg instanceof SendFileToServerMessage && isAuthorized){
-            SendFileToServerMessage message = (SendFileToServerMessage) msg;
-            try{
-                if(outputStream==null){
-                    outputStream = new FileOutputStream(homeFolder + message.getPath());
+        if (isAuthorized) {
+            if (msg instanceof RequestFileFromServerMessage) {
+                if (inputStream == null) {
+                    RequestFileFromServerMessage message = (RequestFileFromServerMessage) msg;
+                    File filePath = new File(homeFolder + message.getPath());
+                    inputStream = new FileInputStream(filePath);
                 }
-                outputStream.write(message.getContent());
-                if (message.isLast()){
-                    System.out.println("От клиента получен файл");
+                sendFile(ctx);
+            }
+            if (msg instanceof SendFileToServerMessage) {
+                SendFileToServerMessage message = (SendFileToServerMessage) msg;
+                try {
+                    if (outputStream == null) {
+                        outputStream = new FileOutputStream(homeFolder + message.getPath());
+                    }
+                    outputStream.write(message.getContent());
+                    if (message.isLast()) {
+                        System.out.println("Файл от клиента получен полностью");
+                         outputStream.close();
+                         outputStream = null;
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
                     outputStream.close();
                     outputStream = null;
                 }
-            } catch(Exception e){
-                e.printStackTrace();
-                outputStream.close();
-                outputStream = null;
+            }
+            if (msg instanceof DeleteFileFromServerMessage) {
+                DeleteFileFromServerMessage deleteMessage = (DeleteFileFromServerMessage) msg;
+                File file = new File(homeFolder + deleteMessage.getPath());
+                file.delete();
+            }
+            if (msg instanceof RequestFilelistMessage) {
+                String[] list = (new File(homeFolder)).list();
+                ListMessage listMessage = new ListMessage();
+                listMessage.setList(list);
+                ctx.writeAndFlush(listMessage);
             }
         }
     }
