@@ -1,3 +1,4 @@
+package message;
 
 public class TextMessage extends Message {
     private String text;

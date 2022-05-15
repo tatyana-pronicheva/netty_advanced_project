@@ -1,3 +1,5 @@
+package message;
+
 public class RequestFileFromServerMessage extends Message{
     private String path;
 

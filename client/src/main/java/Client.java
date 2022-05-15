@@ -1,3 +1,4 @@
+import handler.*;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -5,6 +6,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import message.*;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -15,6 +17,7 @@ import java.io.IOException;
 public class Client {
     FileOutputStream outputStream = null;
     FileInputStream inputStream = null;
+    Channel channel;
 
     public static void main(String[] args) throws FileNotFoundException {
         new Client().start();
@@ -45,28 +48,35 @@ public class Client {
                                             AuthMessage authMessage1 = new AuthMessage();
                                             authMessage1.setLogin("login1");
                                             authMessage1.setPassword("pass1");
-                                            System.out.println("Try to auth: " + authMessage1.getLogin() + "/" + authMessage1.getPassword());
+                                            System.out.println("  Пытаюсь авторизоваться: " + authMessage1.getLogin() + "/" + authMessage1.getPassword());
                                             ctx.writeAndFlush(authMessage1);
                                         }
 
                                         @Override
                                         protected void channelRead0(ChannelHandlerContext ctx, Message msg) throws FileNotFoundException {
                                             if (msg instanceof TextMessage){
-                                                System.out.println("receive msg " + msg);
+                                                System.out.println("  Получено сообщение " + msg);
                                             }
-
                                             if (msg instanceof ServerResponseWithContentMessage){
-                                                if (outputStream==null) outputStream = new FileOutputStream("/home/tpronicheva/hiiii.zip");
                                                 ServerResponseWithContentMessage message = (ServerResponseWithContentMessage) msg;
                                                 try{
                                                   outputStream.write(message.getContent());
                                                   if (message.isLast()){
-                                                      System.out.println("С сервера получен файл");
+                                                      System.out.println("  С сервера получен файл");
                                                       outputStream.close();
                                                       outputStream = null;}
                                                 } catch(Exception e){
                                                     e.printStackTrace();
                                                 }
+                                            }
+                                            if (msg instanceof ListMessage){
+                                                String[] list = ((ListMessage) msg).getList();
+                                                if (list.length>0){
+                                                System.out.println("  Список файлов на сервере:");
+                                                for(int i = 0; i< list.length; i++){
+                                                    System.out.println("  "+list[i]);
+                                                }
+                                                } else System.out.println("  Файлов на сервере нет");
                                             }
                                         }
                                     }
@@ -74,17 +84,11 @@ public class Client {
                         }
                     });
 
-            System.out.println("Client started");
-            Channel channel = bootstrap.connect("localhost", 9000).sync().channel();
-
-
-            RequestFileFromServerMessage message = new RequestFileFromServerMessage();
-            message.setPath("hi.zip");
-            channel.writeAndFlush(message);
-
-            String fileDestinationPoint = "hi.zip";
-            String fileSourcePoint = "/home/tpronicheva/video.zip";
-            sendFile(channel,fileSourcePoint,fileDestinationPoint);
+            System.out.println("  Приложение запущено");
+            channel = bootstrap.connect("localhost", 9000).sync().channel();
+              new Thread(()->{
+            new CommandHandler(this);
+             }).start();
 
             channel.closeFuture().sync();
         } catch (Exception e) {
@@ -94,26 +98,49 @@ public class Client {
         }
     }
 
-    private void sendFile(Channel channel, String fileSourcePoint, String fileDestinationPoint) throws IOException {
-        if (inputStream==null) inputStream = new FileInputStream(fileSourcePoint);
-        byte[] fileContent = inputStream.readNBytes(64*1024);
-        SendFileToServerMessage contentMessage = new SendFileToServerMessage();
-        contentMessage.setPath(fileDestinationPoint);
-        contentMessage.setLast(inputStream.available()<=0);
-        contentMessage.setContent(fileContent);
-
-        channel.writeAndFlush(contentMessage).addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture channelFuture) throws Exception {
-                if (!contentMessage.isLast()){
-                    sendFile(channel,fileSourcePoint,fileDestinationPoint);
-                }
+    void sendFile(String fileSourcePoint, String fileDestinationPoint) throws Exception {
+            if (inputStream == null) {
+                inputStream = new FileInputStream(fileSourcePoint);
+                System.out.println("  Отправляю файл из " + fileSourcePoint);
             }
-        });
-        if(contentMessage.isLast()){
-            System.out.println("На сервер отправлен файл");
-            inputStream.close();
-            inputStream = null;
-        }
+            byte[] fileContent = inputStream.readNBytes(64 * 1024);
+            SendFileToServerMessage contentMessage = new SendFileToServerMessage();
+            contentMessage.setPath(fileDestinationPoint);
+            contentMessage.setLast(inputStream.available() <= 0);
+            contentMessage.setContent(fileContent);
+
+            channel.writeAndFlush(contentMessage).addListener(new ChannelFutureListener() {
+                @Override
+                public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                    if (!contentMessage.isLast()) {
+                        sendFile(fileSourcePoint, fileDestinationPoint);
+                    }
+                }
+            });
+            if (contentMessage.isLast()) {
+                System.out.println("  ФаЙЛ отправлен");
+                inputStream.close();
+                inputStream = null;
+            }
+    }
+
+    void getFileFromServer(String fileSourcePoint, String fileDestinationPoint) throws FileNotFoundException {
+            RequestFileFromServerMessage message = new RequestFileFromServerMessage();
+            message.setPath(fileSourcePoint);
+            if (outputStream==null) {
+              outputStream = new FileOutputStream(fileDestinationPoint);
+            }
+             channel.writeAndFlush(message);
+    }
+
+    void deleteFromServer(String filePath) {
+        DeleteFileFromServerMessage message = new DeleteFileFromServerMessage();
+        message.setPath(filePath);
+        System.out.println("  Отправляю запрос на удаление файла");
+        channel.writeAndFlush(message);
+    }
+    void requestFilelist() {
+        RequestFilelistMessage message = new RequestFilelistMessage();
+        channel.writeAndFlush(message);
     }
 }

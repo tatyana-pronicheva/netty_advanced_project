@@ -1,3 +1,5 @@
+package message;
+
 public class AuthMessage extends Message{
     private String login;
     private String password;
