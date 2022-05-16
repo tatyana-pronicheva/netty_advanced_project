@@ -44,15 +44,6 @@ public class Client {
                                     new SimpleChannelInboundHandler<Message>() {
 
                                         @Override
-                                        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-                                            AuthMessage authMessage1 = new AuthMessage();
-                                            authMessage1.setLogin("login1");
-                                            authMessage1.setPassword("pass1");
-                                            System.out.println("  Пытаюсь авторизоваться: " + authMessage1.getLogin() + "/" + authMessage1.getPassword());
-                                            ctx.writeAndFlush(authMessage1);
-                                        }
-
-                                        @Override
                                         protected void channelRead0(ChannelHandlerContext ctx, Message msg) throws FileNotFoundException {
                                             if (msg instanceof TextMessage){
                                                 System.out.println("  Получено сообщение " + msg);
@@ -86,9 +77,9 @@ public class Client {
 
             System.out.println("  Приложение запущено");
             channel = bootstrap.connect("localhost", 9000).sync().channel();
-              new Thread(()->{
-            new CommandHandler(this);
-             }).start();
+            new Thread(()->{
+                new CommandHandler(this);
+            }).start();
 
             channel.closeFuture().sync();
         } catch (Exception e) {
@@ -118,7 +109,7 @@ public class Client {
                 }
             });
             if (contentMessage.isLast()) {
-                System.out.println("  ФаЙЛ отправлен");
+                System.out.println("  Файл отправлен");
                 inputStream.close();
                 inputStream = null;
             }
@@ -142,5 +133,12 @@ public class Client {
     void requestFilelist() {
         RequestFilelistMessage message = new RequestFilelistMessage();
         channel.writeAndFlush(message);
+    }
+    void tryToAuth(String login, String password) {
+        AuthMessage authMessage = new AuthMessage();
+        authMessage.setLogin(login);
+        authMessage.setPassword(password);
+        System.out.println("  Пытаюсь авторизоваться: " + authMessage.getLogin() + "/" + authMessage.getPassword());
+        channel.writeAndFlush(authMessage);
     }
 }
