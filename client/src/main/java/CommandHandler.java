@@ -41,10 +41,8 @@ public class CommandHandler {
                 client.getFileFromServer(fileSourcePoint,fileDestinationPoint);
             } else {
                 client.getFileFromServer(fileSourcePoint,fileDestinationPoint);
-
             }
         }
-
         if (command.startsWith("serverdelete")){
             commandIsRecognized = true;
             String[] splittedCommand = command.split(" ");
@@ -55,6 +53,13 @@ public class CommandHandler {
             commandIsRecognized = true;
             client.requestFilelist();
         }
+        if (command.startsWith("auth")){
+            commandIsRecognized = true;
+            String[] splittedCommand = command.split(" ");
+            String login = splittedCommand[1];
+            String password = splittedCommand[2];
+            client.tryToAuth(login,password);
+        }
         }catch (Exception e) {
             System.out.println("  Попробуйте ввести команду еще раз");
         }
@@ -64,6 +69,7 @@ public class CommandHandler {
     }
 
     private void printHelpMessage(){
+        System.out.println("  auth {логин} {пароль} - авторизоваться на сервере");
         System.out.println("  q - выйти из приложения");
         System.out.println("  help - показать подсказку");
         System.out.println("  push {локальный путь} - скопировать файл на сервер");
